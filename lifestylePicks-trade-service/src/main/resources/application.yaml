@@ -1,0 +1,39 @@
+server:
+  port: ${TRADE_PORT:8085}
+spring:
+  application:
+    name: lifestylePicks-trade-service
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${TRADE_DB_URL:jdbc:mysql://127.0.0.1:3306/hmdp?useSSL=false&serverTimezone=UTC&characterEncoding=utf8}
+    username: ${TRADE_DB_USERNAME:root}
+    password: ${TRADE_DB_PASSWORD:mysql}
+    initialization-mode: never
+  redis:
+    host: ${REDIS_HOST:127.0.0.1}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    database: ${REDIS_DATABASE:0}
+    timeout: 2s
+  jackson:
+    default-property-inclusion: non_null
+mybatis-plus:
+  type-aliases-package: com.lifestylepicks.trade.entity
+lifestylepicks:
+  trade:
+    order-topic: ${SECKILL_ORDER_TOPIC:seckill_order_topic}
+    outbox-key: seckill:outbox
+    send-timeout: 3s
+    dispatch-retry-delay: 5s
+    dispatch-interval: 1000
+    zone: Asia/Shanghai
+    mq-enabled: ${TRADE_MQ_ENABLED:true}
+
+rocketmq:
+  name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
+  producer:
+    group: ${ROCKETMQ_PRODUCER_GROUP:seckill_order_producer_group}
+    send-message-timeout: 3000
+    retry-times-when-send-failed: 2
+  consumer:
+    group: ${ROCKETMQ_CONSUMER_GROUP:seckill_order_consumer_group}

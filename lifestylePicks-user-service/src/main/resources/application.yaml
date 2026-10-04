@@ -1,0 +1,28 @@
+server:
+  port: ${USER_PORT:8083}
+spring:
+  application:
+    name: lifestylePicks-user-service
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${USER_DB_URL:jdbc:mysql://127.0.0.1:3306/hmdp?useSSL=false&serverTimezone=UTC&characterEncoding=utf8}
+    username: ${USER_DB_USERNAME:root}
+    password: ${USER_DB_PASSWORD:mysql}
+    initialization-mode: never
+  redis:
+    host: ${REDIS_HOST:127.0.0.1}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    database: ${REDIS_DATABASE:0}
+    timeout: 2s
+  jackson:
+    default-property-inclusion: non_null
+mybatis-plus:
+  type-aliases-package: com.lifestylepicks.user.entity
+lifestylepicks:
+  user:
+    token-ttl: ${TOKEN_TTL:36000m}
+    code-ttl: 2m
+    sign-zone: Asia/Shanghai
+    # 保留原项目的模拟短信方式；本地开发显式开启后才能在日志看到验证码。
+    log-code: ${USER_LOG_CODE:false}

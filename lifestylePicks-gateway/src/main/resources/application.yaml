@@ -1,0 +1,109 @@
+server:
+  port: ${GATEWAY_PORT:10010}
+
+spring:
+  application:
+    name: lifestylePicks-gateway
+  main:
+    web-application-type: reactive
+  redis:
+    host: ${REDIS_HOST:127.0.0.1}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    database: ${REDIS_DATABASE:0}
+    timeout: 1s
+  cloud:
+    gateway:
+      httpclient:
+        connect-timeout: 1000
+        response-timeout: 5s
+      routes:
+        - id: user-api
+          order: -40
+          uri: ${USER_SERVICE_URI:http://127.0.0.1:8083}
+          predicates:
+            - Path=/api/user,/api/user/**
+          filters:
+            - StripPrefix=1
+        - id: user-direct
+          order: -30
+          uri: ${USER_SERVICE_URI:http://127.0.0.1:8083}
+          predicates:
+            - Path=/user,/user/**
+        - id: shop-api
+          order: -20
+          uri: ${SHOP_SERVICE_URI:http://127.0.0.1:8082}
+          predicates:
+            - Path=/api/shop,/api/shop/**,/api/shop-type,/api/shop-type/**
+          filters:
+            - StripPrefix=1
+        - id: shop-direct
+          order: -10
+          uri: ${SHOP_SERVICE_URI:http://127.0.0.1:8082}
+          predicates:
+            - Path=/shop,/shop/**,/shop-type,/shop-type/**
+        - id: content-api
+          order: -60
+          uri: ${CONTENT_SERVICE_URI:http://127.0.0.1:8084}
+          predicates:
+            - Path=/api/blog,/api/blog/**,/api/follow,/api/follow/**,/api/blog-comments,/api/blog-comments/**,/api/upload,/api/upload/**,/api/imgs/**
+          filters:
+            - StripPrefix=1
+        - id: content-direct
+          order: -50
+          uri: ${CONTENT_SERVICE_URI:http://127.0.0.1:8084}
+          predicates:
+            - Path=/blog,/blog/**,/follow,/follow/**,/blog-comments,/blog-comments/**,/upload,/upload/**,/imgs/**
+        - id: trade-api
+          order: -80
+          uri: ${TRADE_SERVICE_URI:http://127.0.0.1:8085}
+          predicates:
+            - Path=/api/voucher,/api/voucher/**,/api/voucher-order,/api/voucher-order/**
+          filters:
+            - StripPrefix=1
+        - id: trade-direct
+          order: -70
+          uri: ${TRADE_SERVICE_URI:http://127.0.0.1:8085}
+          predicates:
+            - Path=/voucher,/voucher/**,/voucher-order,/voucher-order/**
+
+lifestylepicks:
+  auth:
+    # 与原后端的登录 Hash key 和过期时间一致；登录端也应使用同一 TTL。
+    token-key-prefix: "login:token:"
+    token-ttl: ${TOKEN_TTL:36000m}
+    redis-timeout: 1s
+    # 默认要求登录，仅明确放行下列请求方法和业务路径。
+    # 两个过滤器先执行，因此此处使用去掉一层 /api 后的路径。
+    public-endpoints:
+      - path: /user/code
+        methods: [POST]
+      - path: /user/login
+        methods: [POST]
+      - path: /shop/{id:[0-9]+}
+        methods: [GET, HEAD]
+      - path: /shop/of/type
+        methods: [GET, HEAD]
+      - path: /shop/of/name
+        methods: [GET, HEAD]
+      - path: /shop-type/list
+        methods: [GET, HEAD]
+      - path: /voucher/list/{shopId:[0-9]+}
+        methods: [GET, HEAD]
+      - path: /imgs/**
+        methods: [GET, HEAD]
+      - path: /blog/hot
+        methods: [GET, HEAD]
+
+management:
+  health:
+    redis:
+      # 由 LoginRedisHealthIndicator 使用 PING 检查，替代默认 INFO 检查。
+      enabled: false
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

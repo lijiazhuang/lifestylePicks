@@ -1,0 +1,28 @@
+server:
+  port: ${CONTENT_PORT:8084}
+spring:
+  application:
+    name: lifestylePicks-content-service
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${CONTENT_DB_URL:jdbc:mysql://127.0.0.1:3306/hmdp?useSSL=false&serverTimezone=UTC&characterEncoding=utf8}
+    username: ${CONTENT_DB_USERNAME:root}
+    password: ${CONTENT_DB_PASSWORD:mysql}
+    initialization-mode: never
+  redis:
+    host: ${REDIS_HOST:127.0.0.1}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    database: ${REDIS_DATABASE:0}
+    timeout: 2s
+  jackson:
+    default-property-inclusion: non_null
+mybatis-plus:
+  type-aliases-package: com.lifestylepicks.content.entity
+lifestylepicks:
+  content:
+    upload-dir: ${CONTENT_UPLOAD_DIR:./uploads}

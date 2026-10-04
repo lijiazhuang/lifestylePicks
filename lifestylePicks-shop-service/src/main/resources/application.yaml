@@ -1,0 +1,30 @@
+server:
+  port: ${SHOP_PORT:8082}
+
+spring:
+  application:
+    name: lifestylePicks-shop-service
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${SHOP_DB_URL:jdbc:mysql://127.0.0.1:3306/hmdp?useSSL=false&serverTimezone=UTC&characterEncoding=utf8}
+    username: ${SHOP_DB_USERNAME:root}
+    password: ${SHOP_DB_PASSWORD:mysql}
+    # 建库脚本仅用于手动导入，启动时不自动修改现有数据库。
+    initialization-mode: never
+  redis:
+    host: ${REDIS_HOST:127.0.0.1}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    database: ${REDIS_DATABASE:0}
+    timeout: 2s
+  jackson:
+    default-property-inclusion: non_null
+
+mybatis-plus:
+  type-aliases-package: com.lifestylepicks.shop.entity
+
+lifestylepicks:
+  shop:
+    geo:
+      # 首次迁移或 Redis 数据丢失时开启，从店铺表重新添加 GEO 成员。
+      initialize: ${SHOP_GEO_INITIALIZE:false}

@@ -1,0 +1,7 @@
+**/target/
+.idea/
+*.iml
+*.log
+.maven-repository/
+__pycache__/
+*.pyc
