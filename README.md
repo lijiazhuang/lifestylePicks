@@ -30,7 +30,7 @@ lifestylePicks/
 
 ## 构建与启动
 
-在 `lifestylePicks` 目录执行。此版本基线请使用 JDK 8；当前机器默认 Java 是 25，可在当前 PowerShell 会话切换：
+在 `lifestylePicks` 目录执行。此版本基线请使用 JDK 8；
 
 ```powershell
 $env:JAVA_HOME = 'C:\Program Files\Java\jdk1.8.0_202'
@@ -38,8 +38,6 @@ $env:Path = "$env:JAVA_HOME\bin;$env:Path"
 mvn '-Dmaven.repo.local=./.maven-repository' clean package
 java -jar .\lifestylePicks-gateway\target\lifestylePicks-gateway-0.0.1-SNAPSHOT.jar
 ```
-
-依赖缓存放在父工程的 `.maven-repository` 中，已加入 Git 忽略规则，避免构建写入机器上其他 Maven 仓库目录。
 
 IDEA 中将根 `pom.xml` 导入为 Maven 项目，项目 SDK 和 Maven Runner 设为 JDK 8，运行 `GatewayApplication`。
 
@@ -56,7 +54,6 @@ $env:REDIS_PORT = '6379'
 # Redis 配置了密码时再设置：$env:REDIS_PASSWORD = '实际密码'
 ```
 
-各服务 URI 使用 HTTP/HTTPS 基础地址，不附带 `/api` 前缀。网关正常配置没有 MONOLITH_URI 路由。
 
 ## 请求流程
 
