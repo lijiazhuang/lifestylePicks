@@ -17,8 +17,10 @@ import org.springframework.stereotype.Component;
 public class SeckillOrderListener implements RocketMQListener<SeckillOrderMessage>,RocketMQPushConsumerLifecycleListener {
     private final OrderMessageHandler handler;
     public SeckillOrderListener(OrderMessageHandler handler){this.handler=handler;}
-    @Override public void onMessage(SeckillOrderMessage message){handler.handle(message);}
-    @Override public void prepareStart(DefaultMQPushConsumer consumer){
+    @Override
+    public void onMessage(SeckillOrderMessage message){handler.handle(message);}
+    @Override
+    public void prepareStart(DefaultMQPushConsumer consumer){
         // 新组读取已有消息；已有组仍按 Broker 保存的消费进度继续。
         consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_FIRST_OFFSET);
     }

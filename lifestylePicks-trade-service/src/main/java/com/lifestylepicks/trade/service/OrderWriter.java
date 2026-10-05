@@ -28,10 +28,13 @@ public class OrderWriter {
             return transaction.execute(status -> {
                 VoucherOrder existing=orders.selectOne(new QueryWrapper<VoucherOrder>().eq("user_id",order.getUserId())
                         .eq("voucher_id",order.getVoucherId()).last("LIMIT 1"));
-                if(existing!=null){return existing.getId();}
+                if(existing!=null){
+                    return existing.getId();
+                }
                 int updated=stock.update(null,new UpdateWrapper<SeckillVoucher>().setSql("stock=stock-1")
                         .eq("voucher_id",order.getVoucherId()).gt("stock",0));
-                if(updated!=1){throw new RejectedOrderException("数据库库存不足");}
+                if(updated!=1){throw new RejectedOrderException("数据库库存不足");
+                }
                 order.setPayType(1);order.setStatus(1);orders.insert(order);return order.getId();
             });
         }finally{lock.unlock();}

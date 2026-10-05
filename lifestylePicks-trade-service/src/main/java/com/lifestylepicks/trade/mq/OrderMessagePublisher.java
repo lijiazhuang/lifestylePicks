@@ -36,7 +36,9 @@ public class OrderMessagePublisher {
         try{
             SendResult result=rocketMQ.syncSend(properties.getOrderTopic(),MessageBuilder.withPayload(message)
                     .setHeader(RocketMQHeaders.KEYS,message.getOrderId().toString()).build(),properties.getSendTimeout().toMillis());
-            if(result==null || result.getSendStatus()!=SendStatus.SEND_OK){throw new IllegalStateException("RocketMQ 未确认发送成功");}
+            if(result==null || result.getSendStatus()!=SendStatus.SEND_OK){
+                throw new IllegalStateException("RocketMQ 未确认发送成功");
+            }
             delivery.sent(message.getOrderId());
         }catch(RuntimeException uncertain){
             // 超时可能已经送达，不能退库存；补发同一订单由消费者幂等处理。
