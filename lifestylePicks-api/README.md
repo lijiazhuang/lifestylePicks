@@ -71,7 +71,7 @@ lifestylepicks:
 
 用户客户端校验输入，去重并按输入顺序返回，单次最多 100 个 ID，自动分片，跳过不存在的用户。HTTP 错误、业务失败或不合法响应转换为 `RemoteCallException`，不会自动回读旧库。`ApiFeignConfiguration` 配置连接与读取超时，默认不隐式重试、不自动跟随重定向。
 
-`UserContextRequestInterceptor` 每次从 common 的 `UserContext` 读取当前 ID，先移除旧的 `X-User-Id`，再写入当前用户；匿名调用完全移除身份头。构建 Feign 时将它加入拦截器链末尾，确保配置中的默认 Header 或其他拦截器不会留下重复身份。构建器使用普通同步 Feign，不通过 Hystrix 线程隔离调用，以保持当前请求的用户上下文。
+`UserContextRequestInterceptor` 作为普通 `RequestInterceptor` Bean 在 Feign 客户端子容器中注册。每次请求从 common 的 `UserContext` 读取当前 ID，先移除旧的 `X-User-Id`，再写入当前用户；匿名调用完全移除身份头。用户身份动态传递，不配置固定的默认身份头。构建器使用普通同步 Feign，不通过 Hystrix 线程隔离调用，以保持当前请求的用户上下文。
 
 继续使用上面的 `lifestylepicks.api` 配置即可。如另外设置 Hoxton 对应的 `feign.client.config`，应统一维护超时策略，避免同一个客户端出现两套不同配置；该版本的命名配置 ID 为 `lifestylepicksUserClient`。
 

@@ -3,6 +3,7 @@ package example.consumer;
 import com.lifestylepicks.api.client.UserClient;
 import com.lifestylepicks.api.feign.FeignUserClient;
 import com.lifestylepicks.api.feign.UserFeignClient;
+import com.lifestylepicks.api.feign.UserContextRequestInterceptor;
 import com.lifestylepicks.api.exception.RemoteCallException;
 import com.lifestylepicks.common.constant.UserHeaders;
 import com.lifestylepicks.common.context.UserContext;
@@ -38,6 +39,9 @@ class ApiClientAutoConfigurationTest {
             assertThat(Proxy.isProxyClass(context.getBean(UserFeignClient.class).getClass())).isTrue();
             assertThat(context.getBean(UserFeignClient.class).toString()).contains("http://127.0.0.1:8083");
             assertThat(context).doesNotHaveBean(RequestInterceptor.class);
+            assertThat(context.getBean(FeignContext.class)
+                    .getInstances("lifestylepicksUserClient", RequestInterceptor.class).values())
+                    .hasSize(1).first().isInstanceOf(UserContextRequestInterceptor.class);
         });
     }
 
@@ -81,8 +85,7 @@ class ApiClientAutoConfigurationTest {
     @Test
     void forwardsCurrentIdentityAndClearsAnonymousHeaderOverHttp() throws Exception {
         try (FakeUserServer server = new FakeUserServer()) {
-            runner.withPropertyValues("USER_SERVICE_URI=" + server.url(),
-                    "feign.client.config.default.defaultRequestHeaders.X-User-Id=999").run(context -> {
+            runner.withPropertyValues("USER_SERVICE_URI=" + server.url()).run(context -> {
                 UserClient client = context.getBean(UserClient.class);
                 UserContext.setUser(new UserInfo(42L));
                 client.findBatch(Collections.singletonList(1L));
