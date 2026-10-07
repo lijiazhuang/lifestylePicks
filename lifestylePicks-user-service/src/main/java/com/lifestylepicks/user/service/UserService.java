@@ -124,8 +124,8 @@ public class UserService {
 
     public Result signCount() {
         LocalDate now = LocalDate.now(clock);
-        List<Long> bits = redis.opsForValue().bitField(signKey(now), BitFieldSubCommands.create()
-                .get(BitFieldSubCommands.BitFieldType.unsigned(now.getDayOfMonth())).valueAt(0));
+        List<Long> bits = redis.opsForValue().bitField(signKey(now),
+                BitFieldSubCommands.create().get(BitFieldSubCommands.BitFieldType.unsigned(now.getDayOfMonth())).valueAt(0));
         long value = bits == null || bits.isEmpty() || bits.get(0) == null ? 0 : bits.get(0);
         int count = 0;
         while ((value & 1) != 0) { count++; value >>>= 1; }

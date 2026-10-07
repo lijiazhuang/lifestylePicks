@@ -53,7 +53,7 @@ IDEA 中运行 `com.lifestylepicks.user.UserApplication`。正常配置启动四
 
 ## 内容业务依赖
 
-原单体注入 api 的 `UserClient`，由 api 的 HTTP 实现调用用户服务内部批量接口。热门笔记、Feed 按作者批量查询，点赞和共同关注保持输入 ID 顺序；缺失用户不再触发空指针，笔记显示“已注销用户”。单次请求最多 100 个 ID，客户端自动分批，默认连接超时 500ms、读取超时 1s，配置详见 [api 说明](../lifestylePicks-api/README.md)。
+内容服务和原单体注入 api 的 `UserClient`，由 api 的 OpenFeign 实现通过固定地址调用用户服务内部批量接口，不依赖注册中心。热门笔记、Feed 按作者批量查询，点赞和共同关注保持输入 ID 顺序；缺失用户不再触发空指针，笔记显示“已注销用户”。单次请求最多 100 个 ID，客户端自动分批，默认连接超时 500ms、读取超时 1s，配置详见 [api 说明](../lifestylePicks-api/README.md)。
 
 默认模式下用户服务故障不会悄悄改读旧用户表。内部接口仅投影公开字段，不通过网关转发到用户服务；业务服务端口需要限制为可信网关和内部服务可访问。当前没有启用服务间签名或服务网格身份认证。
 
@@ -65,7 +65,7 @@ IDEA 中运行 `com.lifestylepicks.user.UserApplication`。正常配置启动四
 
 物理迁库时先停止用户写入，再导出最新的 `tb_user`、`tb_user_info`，导入例如 `hmdp_user`，然后修改 `USER_DB_URL`。不要用示例数据替换已有账号。手机号唯一索引必须保留；它是并发注册的最终保障。原单体的内容查询无需访问新用户数据库。
 
-回退时原单体设置 `hmdp.legacy-user.enabled=true`，同时将网关 `USER_SERVICE_URI` 指向原单体。此开关恢复旧 `/user` 控制器、旧 Token 续期，以及提供本地 UserClient 替换 api 的默认 HTTP 实现。回退前应确认旧数据库中存在最新用户数据；当前服务故障不会自动触发回退。
+回退时原单体设置 `hmdp.legacy-user.enabled=true`，同时将网关 `USER_SERVICE_URI` 指向原单体。此开关恢复旧 `/user` 控制器、旧 Token 续期，以及提供本地 UserClient 替换 api 的默认 Feign 实现。回退前应确认旧数据库中存在最新用户数据；当前服务故障不会自动触发回退。
 
 ## 可复现验证
 
@@ -81,4 +81,4 @@ python .\scripts\verify_user_service.py --java 'C:\Program Files\Java\jdk1.8.0_2
 
 验证包含登录/退出、验证码错误/过期规则及单次使用、注册与并发请求、Token Hash 和续期、资料字段隐私、common 身份恢复、签到、不同会话隔离、内部批量上限，以及作者/点赞/共同关注资料查询。验证结束自动停止进程，日志和测试数据库保留在 `target/auth-check-*` 中。
 
-HTTP 客户端测试已迁入 api 模块。原单体另有 `LegacyUserClientConfigurationTest` 验证本地回退适配；使用 `mvn -Dtest=LegacyUserClientConfigurationTest test` 可单独运行，不需要启动原有数据库集成测试。
+Feign 客户端测试位于 api 模块，包含真实本地 HTTP 请求、自动装配、身份隔离、超时与错误处理。原单体另有 `LegacyUserClientConfigurationTest` 验证本地回退适配；使用 `mvn -Dtest=LegacyUserClientConfigurationTest test` 可单独运行，不需要启动原有数据库集成测试。

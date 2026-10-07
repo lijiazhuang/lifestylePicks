@@ -59,16 +59,20 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ['java', 'redis-server', 'mysqld', 'mysql']:
         parser.add_argument('--' + name, default=shutil.which(name))
+    parser.add_argument('--profile-client', choices=['legacy', 'content'], default='legacy',
+                        help='Verify remote profiles through the legacy app or standalone content service')
     args = parser.parse_args()
     if not all([args.java, args.redis_server, args.mysqld, args.mysql]):
         parser.error('Provide Java 8, redis-server, mysqld and mysql executable paths')
     root = Path(__file__).resolve().parents[1]
     legacy_jar = root.parent / "hm-dianping-backend/target/hm-dianping-0.0.1-SNAPSHOT.jar"
+    if args.profile_client == 'content':
+        legacy_jar = root / 'lifestylePicks-content-service/target/lifestylePicks-content-service-0.0.1-SNAPSHOT.jar'
     target = root / 'lifestylePicks-user-service' / 'target'
     user_jar = target / 'lifestylePicks-user-service-0.0.1-SNAPSHOT.jar'
     gateway_jar = root / 'lifestylePicks-gateway/target/lifestylePicks-gateway-0.0.1-SNAPSHOT.jar'
     if not user_jar.exists() or not gateway_jar.exists() or not legacy_jar.exists():
-        parser.error('Build the reactor and legacy backend JARs first')
+        parser.error('Build the reactor and selected profile-client JARs first')
     mysql_port, redis_port = free_port(), free_port()
     mysql_base = Path(args.mysqld).resolve().parent.parent
     backend = ThreadingHTTPServer(('127.0.0.1', 0), Backend)
@@ -132,14 +136,18 @@ def main():
                 fixture = (root / 'lifestylePicks-user-service/src/main/resources/db/user.sql').read_text(encoding='utf-8')
                 sql('CREATE DATABASE hmdp_user_verify CHARACTER SET utf8mb4; USE hmdp_user_verify;\n' + fixture)
                 sql("INSERT INTO hmdp_user_verify.tb_user_info(user_id,city,introduce) VALUES(1,'Hangzhou','User Service Profile');")
-                # 单体库故意没有用户表，真实内容请求必须通过用户服务获取资料。
-                source = (root.parent / 'hm-dianping-backend/src/main/resources/db/hmdp.sql').read_text(encoding='utf-8')
-                # 原秒杀表含零日期默认值，只在此独立测试会话兼容旧建表脚本。
+                # 查询方数据库故意没有用户表，内容请求必须通过 Feign 获取资料。
                 statements = ["SET SESSION sql_mode='NO_ENGINE_SUBSTITUTION';",
                               'CREATE DATABASE hmdp_legacy_verify CHARACTER SET utf8mb4; USE hmdp_legacy_verify;']
-                for table in ['tb_blog', 'tb_blog_comments', 'tb_follow', 'tb_voucher', 'tb_seckill_voucher', 'tb_voucher_order']:
-                    statements.append(re.search(r'CREATE TABLE `' + table + r'`.*?;\n', source, re.S).group(0))
-                    statements.extend(line for line in source.splitlines() if line.startswith('INSERT INTO `' + table + '`'))
+                if args.profile_client == 'content':
+                    statements.append((root / 'lifestylePicks-content-service/src/main/resources/db/content.sql')
+                                      .read_text(encoding='utf-8'))
+                else:
+                    # 原秒杀表含零日期默认值，只在此独立测试会话兼容旧建表脚本。
+                    source = (root.parent / 'hm-dianping-backend/src/main/resources/db/hmdp.sql').read_text(encoding='utf-8')
+                    for table in ['tb_blog', 'tb_blog_comments', 'tb_follow', 'tb_voucher', 'tb_seckill_voucher', 'tb_voucher_order']:
+                        statements.append(re.search(r'CREATE TABLE `' + table + r'`.*?;\n', source, re.S).group(0))
+                        statements.extend(line for line in source.splitlines() if line.startswith('INSERT INTO `' + table + '`'))
                 statements.append("CREATE USER 'legacy'@'%' IDENTIFIED WITH mysql_native_password BY 'verify';")
                 statements.append("GRANT ALL ON hmdp_legacy_verify.* TO 'legacy'@'%';")
                 sql('\n'.join(statements))
@@ -237,12 +245,13 @@ def main():
                 assert redis_command(redis_port, 'GETBIT', 'sign:1:' + now.strftime('%Y%m'), now.day - 1) == 1
                 assert ok('/user/sign/count', new_token) == 0
 
-                # 真实旧单体调用新服务，且单体数据库没有 tb_user/tb_user_info。
+                # 真实业务服务通过 Feign 调用用户服务，查询方无 tb_user/tb_user_info。
                 hot = ok('/api/blog/hot')
                 known = {1: '小鱼同学', 2: '可可今天不吃肉', 4: 'user_slxaxy2au9f3tanffaxr', 5: 'user_n0bb8mwwg4'}
                 assert hot and all(blog['name'] == known.get(blog['userId'], '已注销用户') for blog in hot)
-                redis_command(redis_port, 'ZADD', 'blog:liked:1', 100, 2, 200, 1)
-                likes = ok('/blog/likes/1', token)
+                liked_blog = 4 if args.profile_client == 'content' else 1
+                redis_command(redis_port, 'ZADD', 'blog:liked:' + str(liked_blog), 100, 2, 200, 1)
+                likes = ok('/blog/likes/' + str(liked_blog), token)
                 assert [user['id'] for user in likes] == [2, 1]
                 redis_command(redis_port, 'SADD', 'follows:1', 2, 4)
                 redis_command(redis_port, 'SADD', 'follows:5', 2, 4)
@@ -267,7 +276,7 @@ def main():
                 assert request(gateway_port, '/api/user/me', second_token)[0] >= 500
                 print('PASS: real user login/logout, one-use OTP, new registration, token TTL/renewal,')
                 print('      profiles, common identity, sign bitmap, concurrent login and session isolation;')
-                print('      real legacy blog/likes/follows query remote profiles with NO local user tables')
+                print('      real %s blog/likes/follows use Feign with NO local user tables' % args.profile_client)
                 print('Verification logs and isolated databases: ' + str(work))
             except Exception:
                 for name in logs:

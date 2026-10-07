@@ -6,7 +6,7 @@
 lifestylePicks/
 ├─ pom.xml                         父工程：聚合模块并管理依赖版本
 ├─ lifestylePicks-common/           普通 JAR：身份 Header、UserContext、MVC 自动配置
-├─ lifestylePicks-api/              普通 JAR：调用契约、DTO、HTTP 客户端及自动配置
+├─ lifestylePicks-api/              普通 JAR：调用契约、DTO、OpenFeign 客户端及自动配置
 ├─ lifestylePicks-shop-service/     店铺和分类、MyBatis、缓存与 GEO，默认端口 8082
 ├─ lifestylePicks-user-service/     登录、资料和签到，默认端口 8083
 ├─ lifestylePicks-content-service/  笔记、关注、Feed、评论和上传，默认端口 8084
@@ -168,7 +168,7 @@ python .\scripts\verify_gateway_auth.py --java 'C:\Program Files\Java\jdk1.8.0_2
 
 ## 后续拆分
 
-现有和后续服务间调用集中在 [api 模块](lifestylePicks-api/README.md)。原单体的用户 HTTP 客户端已经移入 api，业务代码只注入 `UserClient`；用户服务共享 api 中的 DTO 和路径。
+现有和后续服务间调用集中在 [api 模块](lifestylePicks-api/README.md)。用户资料调用已使用 OpenFeign，通过固定 URL 连接用户服务，不需要 Nacos/Eureka。业务代码继续注入 `UserClient`，用户服务共享 api 中的 DTO 和路径；地址仍支持 `USER_SERVICE_URI`，默认 `http://127.0.0.1:8083`。
 
 四个业务服务拆分已完成，接口、数据库配置和回退步骤见 [店铺](lifestylePicks-shop-service/README.md)、[用户](lifestylePicks-user-service/README.md)、[内容](lifestylePicks-content-service/README.md)、[交易](lifestylePicks-trade-service/README.md) 说明。服务进程独立，默认暂时复用 `hmdp` 数据库，各自只访问自己的表；尚未对现有数据库执行物理迁库。原单体业务控制器及订单消费者默认关闭，只保留显式回退开关。
 
