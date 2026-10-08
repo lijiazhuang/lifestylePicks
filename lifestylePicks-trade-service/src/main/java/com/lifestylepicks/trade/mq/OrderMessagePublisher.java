@@ -42,8 +42,9 @@ public class OrderMessagePublisher {
             delivery.sent(message.getOrderId());
         }catch(RuntimeException uncertain){
             // 超时可能已经送达，不能退库存；补发同一订单由消费者幂等处理。
+            // 保留完整异常堆栈，区分 Topic 路由、Broker 地址、连接及权限问题。
+            LOG.warn("订单 {} 投递到 {} 未确认，保留预留等待补发",message.getOrderId(),properties.getOrderTopic(),uncertain);
             delivery.defer(message.getOrderId());
-            LOG.warn("订单 {} 发送未确认，等待补发：{}",message.getOrderId(),uncertain.getClass().getSimpleName());
         }
     }
 }

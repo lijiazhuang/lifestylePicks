@@ -184,6 +184,6 @@ python .\scripts\verify_gateway_auth.py --java 'C:\Program Files\Java\jdk1.8.0_2
 python .\scripts\verify_final_services.py --rocketmq-name-server '127.0.0.1:9876' --rocketmq-topic 'seckill_order_verify_topic' --java 'C:\Program Files\Java\jdk1.8.0_202\bin\java.exe' --redis-server 'C:\Users\86156\config\Redis\redis-server.exe' --mysqld 'C:\Program Files\mysql8\mysql-8.0.26-winx64\bin\mysqld.exe' --mysql 'C:\Program Files\mysql8\mysql-8.0.26-winx64\bin\mysql.exe'
 ```
 
-交易异步链路已改为 RocketMQ。整体脚本现在需显式增加 --rocketmq-name-server 和 --rocketmq-topic，连接已有专用测试 Broker/Topic，不会安装 RocketMQ；它使用独立 MySQL/Redis、独立 schema 和 MQ 测试组。本次只执行交易服务说明中的无 Broker 验证，未连接虚拟机 RocketMQ。
+交易异步链路已改为 RocketMQ。整体脚本需显式增加 --rocketmq-name-server 和 --rocketmq-topic，连接已有专用测试 Broker/Topic，不会安装 RocketMQ；它使用独立 MySQL/Redis、独立 schema 和 MQ 测试组。2026-10-07 已另外验证现有虚拟机 Broker 的宿主机发送与读取，以及原失败订单自动恢复；详情见交易服务说明，该验证不等于运行了全量脚本或完成压测。
 
-RocketMQ 默认地址 127.0.0.1:9876，生产组 seckill_order_producer_group，消费组 seckill_order_consumer_group，Topic 为 seckill_order_topic。配置及补发、消费重试说明见 [交易服务](lifestylePicks-trade-service/README.md)。
+RocketMQ 默认地址 192.168.221.131:9876，生产组 seckill_order_producer_group，消费组 seckill_order_consumer_group，Topic 为 seckill_order_topic。配置及补发、消费重试说明见 [交易服务](lifestylePicks-trade-service/README.md)。

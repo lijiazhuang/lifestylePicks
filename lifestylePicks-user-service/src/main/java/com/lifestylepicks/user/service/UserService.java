@@ -56,9 +56,9 @@ public class UserService {
         if (!validPhone(phone)) { return Result.fail("手机号格式错误！"); }
         String code = String.format(Locale.ROOT, "%06d", RANDOM.nextInt(1000000));
         redis.opsForValue().set("login:code:" + phone, code, properties.getCodeTtl());
-        if (properties.isLogCode()) {
+//        if (properties.isLogCode()) {
             LOG.info("开发环境模拟验证码，手机号 {}，验证码 {}", phone, code);
-        }
+//        }
         return Result.ok();
     }
 

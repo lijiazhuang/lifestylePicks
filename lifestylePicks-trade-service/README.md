@@ -6,7 +6,7 @@
 
 ```yaml
 rocketmq:
-  name-server: 127.0.0.1:9876
+  name-server: 192.168.221.131:9876
   producer:
     group: seckill_order_producer_group
   consumer:
@@ -16,11 +16,19 @@ lifestylepicks:
     order-topic: seckill_order_topic
 ```
 
-默认值与用户提供的配置一致，可通过 ROCKETMQ_NAME_SERVER、ROCKETMQ_PRODUCER_GROUP、ROCKETMQ_CONSUMER_GROUP、SECKILL_ORDER_TOPIC 覆盖。虚拟机 Broker 需要存在该 Topic，或具备合适的自动创建策略。
+默认使用现有虚拟机 192.168.221.131 的 NameServer，可通过 ROCKETMQ_NAME_SERVER、ROCKETMQ_PRODUCER_GROUP、ROCKETMQ_CONSUMER_GROUP、SECKILL_ORDER_TOPIC 覆盖。虚拟机 Broker 需要存在该 Topic，或具备合适的自动创建策略。
 
 127.0.0.1 指交易服务所在机器。如果交易服务在 Windows 宿主机运行、MQ 在虚拟机中，需改成可访问的虚拟机 IP，且 Broker 返回的通信地址也应可访问；交易服务同样在虚拟机内运行时可使用本地地址。
 
-只引入 Maven 客户端依赖 rocketmq-spring-boot-starter:2.2.3，没有下载或部署 RocketMQ 服务端，本次没有连接虚拟机 Broker。
+使用 Maven 客户端依赖 rocketmq-spring-boot-starter:2.2.3，连接现有 Docker RocketMQ 5.2.0，不额外下载或部署服务端。
+
+## Docker 连接和存储排查
+
+发送异常需要看完整 cause 链；OrderMessagePublisher 现在保留异常堆栈，而不是只记录异常类名。
+
+- NameServer 能连通不等于 Broker 能连通。使用 `mqadmin topicRoute` 核对 `brokerAddrs`，宿主机访问此虚拟机时应返回 `192.168.221.131:10911`。`127.0.0.1:10911` 会让 Windows 客户端连接自身。Broker 配置 `brokerIP1=192.168.221.131`，端口映射和防火墙必须允许该地址；Docker 启动命令不能再次生成旧回环地址。
+- `MQBrokerException CODE: 14` 且提示 `disk is full` 时，先检查消息存储所在文件系统，而不是扩大发送超时或关闭磁盘保护。2026-10-07 修复时 VM 根分区使用率 99%，主要可释放占用为约 2.8GB 的历史 POP 日志。20 个已轮转日志被压缩校验并保留为 `.gz`，未清理消息存储或数据库；POP 轮转上限调整为每份 20MB、最多 5 份，避免原 128MB × 20 份再次占满空间。
+- 当前部署的 Compose 文件为 `D:\project\agent\ragent\resources\docker\rocketmq-stack-5.2.0.compose.yaml`，已修正启动 IP 并加入 POP 日志限制。当前 Broker 容器保留原数据，通过在线更新和带备份的启动入口修正实现恢复；未通过重建容器恢复服务。
 
 ## 异步流程
 
@@ -65,4 +73,6 @@ PENDING 不设 TTL，避免长时间停机后不能补发；SUCCESS/FAILED 保�
 
 覆盖发送失败保留预留、确认丢失但已消费不退库、重复消费不重复扣库、SQL 插入失败回滚库存、永久库存拒绝。测试使用独立数据库，不连接现有数据。
 
-verify_final_services.py 现在必须提供 --rocketmq-name-server 和 --rocketmq-topic，供后续连接已有专用测试 Broker/Topic。它使用独立测试组，不安装 Broker；本次没有执行真实 Broker 联调。
+verify_final_services.py 必须提供 --rocketmq-name-server 和 --rocketmq-topic，供连接已有专用测试 Broker/Topic。它使用独立测试组，不安装 Broker；该全量脚本尚未作为本次修复验证运行。
+
+2026-10-07 本次修复已通过 10 项订单消息单元测试，并用项目现有客户端从 Windows 向专用诊断 Topic 真实发送和读取回验，得到 SEND_OK 且正文一致。原失败订单 `645837908791525377` 自动补发后 Redis 状态为 SUCCESS，交易服务查询确认数据库中已存在同 ID 的未支付订单；专用诊断 Topic 和消费组测试后清理。此验证不代表容量压测或支付成功。

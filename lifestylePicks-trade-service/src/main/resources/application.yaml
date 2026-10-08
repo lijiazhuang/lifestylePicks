@@ -30,7 +30,7 @@ lifestylepicks:
     mq-enabled: ${TRADE_MQ_ENABLED:true}
 
 rocketmq:
-  name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
+  name-server: ${ROCKETMQ_NAME_SERVER:192.168.221.131:9876}
   producer:
     group: ${ROCKETMQ_PRODUCER_GROUP:seckill_order_producer_group}
     send-message-timeout: 3000
