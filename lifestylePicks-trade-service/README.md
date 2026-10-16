@@ -47,13 +47,37 @@ SeckillOrderMessage 位于 api 的 message 包，字段为 orderId/userId/vouche
 
 Redis 保留库存、买家集合、时间元数据和状态。Lua 原子写入预留和 seckill:outbox 有序集合，没有 XADD/XREADGROUP/XACK 操作。outbox 只用于向 MQ 补发，业务消费与落库仅由 MQ 监听器完成。
 
-默认每秒扫描一次，每批最多 100 条，发送超时 3 秒，未确认后 5 秒再试。只有 SEND_OK 才移除待投递记录。发送超时可能已经送达 Broker，因此不盲目退库存，而是补发同一订单，消费者幂等处理。[发送重试说明](https://rocketmq.apache.org/docs/featureBehavior/05sendretrypolicy/)
+当前 YAML 配置为每轮执行结束后等待 500ms，每批最多 300 条。间隔使用 `lifestylepicks.trade.dispatch-interval`（毫秒），数量使用 `lifestylepicks.trade.dispatch-batch-size`，也可通过环境变量 `SECKILL_DISPATCH_BATCH_SIZE` 配置；数量必须大于零。发送仍为逐条同步发送，因此实际周期还包含整批发送和 Redis 操作耗时，不能用批量大小除以等待间隔当作投递吞吐。
+
+发送超时 3 秒，未确认后 5 秒再试。只有 SEND_OK 才移除待投递记录。发送超时可能已经送达 Broker，因此不盲目退库存，而是补发同一订单，消费者幂等处理。[发送重试说明](https://rocketmq.apache.org/docs/featureBehavior/05sendretrypolicy/)
 
 消费采用集群模式，异常抛出交给 RocketMQ 重试，最多 16 次后进入 %DLQ%seckill_order_consumer_group。新组从已有消息开始读取，已有组按 Broker 进度继续。[消费重试说明](https://rocketmq.apache.org/docs/4.x/consumer/02push/)
 
 OrderWriter 用分布式锁和数据库唯一索引保证幂等；锁持有到事务提交。数据库失败回滚库存并抛异常。提交后 Redis 更新失败也重试，已有订单不会再次扣库。确认数据库库存不足时标记 FAILED、释放买家资格并把 Redis 库存收敛到 0；重复 FAILED 消息不再写库。
 
 PENDING 不设 TTL，避免长时间停机后不能补发；SUCCESS/FAILED 保留 7 天。发送确认后由 Broker 保证投递，消费重试耗尽的消息需人工检查并重放 DLQ，状态不会自动假装订单成功。
+
+### 死信日志告警
+
+`SeckillOrderDeadLetterListener` 订阅 `%DLQ%${rocketmq.consumer.group}`，使用独立告警组 `${rocketmq.consumer.group}_dead_letter_alarm`，与正常订单消费者分开。默认分别为 `%DLQ%seckill_order_consumer_group` 和 `seckill_order_consumer_group_dead_letter_alarm`；变更业务消费组后会自动跟随。
+
+正常消费者的 `maxReconsumeTimes=16` 是消费失败的重试上限；Broker 重试耗尽后转入死信队列。这不是生产者发送失败重试 16 次，当前发送端的 defer 补发流程保持原样。
+
+死信消费者接收原始 `MessageExt`，即使正文不是合法订单 JSON，也能用 ERROR 日志记录 `SECKILL_ORDER_DEAD_LETTER`、原 Topic、消息 ID、原消息 ID、消息 keys（正常订单为 orderId）、重试次数、队列位置、原始时间和 UTF-8 正文。记录完成后正常确认消费，只作为人工处理入口，不更新订单状态、不扣退库存、不自动重放。它不是短信/邮件告警服务；需通过应用日志查看或由日志平台采集。
+
+新告警组从第一条已有死信读取；已有组重启后按保存的进度继续。正常确认不会立即删除 Broker 中的物理消息，消息仍受 Broker 保留策略约束；人工重放前先核对数据库订单及 Redis 预留，避免误操作。
+
+死信 Topic 必须具备读取权限。当前 RocketMQ 5.2.0 的正常死信创建路径包含读写权限，但历史 Topic 配置可能不同，也可能尚未产生第一条死信。可用 `mqadmin topicRoute` 检查实际 Topic；若不存在或缺少读取权限，在现有虚拟机执行以下命令准备一个读写队列（只配置 Topic，不发送订单、不清空消息）：
+
+```sh
+docker exec rmqbroker sh /home/rocketmq/rocketmq-5.2.0/bin/mqadmin updateTopic \
+  -n 192.168.221.131:9876 -b 192.168.221.131:10911 \
+  -t '%DLQ%seckill_order_consumer_group' -r 1 -w 1 -p 6
+```
+
+`6` 为读写权限；如果业务消费组、Broker 地址或容器名变更，应同步替换。这里只调整该死信 Topic 的权限，不调整 Broker 全局权限或 ACL；启用 ACL 的部署还需授权告警组读取。没有读取权限时消费者可能无法收到死信，不能只检查服务启动成功。
+
+本次验证：交易服务离线构建成功，原有 10 项消息逻辑测试和新增 2 项死信监听器测试通过；未运行真实 Broker 的重试耗尽链路，Docker 管理连接在检查时被远端关闭。没有向业务 Topic 注入失败消息，也没有调整虚拟机配置。相关实现依据：[Spring 2.2.3 原始消息转换](https://github.com/apache/rocketmq-spring/blob/rocketmq-spring-all-2.2.3/rocketmq-spring-boot/src/main/java/org/apache/rocketmq/spring/support/DefaultRocketMQListenerContainer.java)、[Broker 5.2.0 死信创建](https://github.com/apache/rocketmq/blob/rocketmq-all-5.2.0/broker/src/main/java/org/apache/rocketmq/broker/processor/SendMessageProcessor.java)。
 
 未确认的记录仍依赖 Redis 持久化和可用性，没有引入数据库 outbox 或跨存储事务。需要关注 seckill:outbox 积压及 RocketMQ 重试/DLQ。
 

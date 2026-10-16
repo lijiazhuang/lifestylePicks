@@ -19,7 +19,8 @@ public class VoucherService {
     private final SeckillCache cache;
     public VoucherService(VoucherMapper vouchers,SeckillVoucherMapper seckill,SeckillCache cache){this.vouchers=vouchers;this.seckill=seckill;this.cache=cache;}
     public Result list(Long shopId){return Result.ok(vouchers.queryVoucherOfShop(shopId));}
-    @Transactional public Result create(Voucher voucher,boolean flash){
+    @Transactional
+    public Result create(Voucher voucher,boolean flash){
         if(voucher.getShopId()==null || voucher.getTitle()==null || voucher.getTitle().trim().isEmpty()
                 || voucher.getPayValue()==null || voucher.getActualValue()==null){return Result.fail("优惠券信息不完整");}
         if(flash && (voucher.getStock()==null || voucher.getStock()<=0 || voucher.getBeginTime()==null

@@ -21,7 +21,7 @@ public class OrderDeliveryStore {
         DefaultRedisScript<Long> value=new DefaultRedisScript<>();value.setLocation(new ClassPathResource("lua/"+file));value.setResultType(Long.class);return value;
     }
     public Set<String> due(){
-        Set<String> ids=redis.opsForZSet().rangeByScore(properties.getOutboxKey(),0,System.currentTimeMillis(),0,100);
+        Set<String> ids=redis.opsForZSet().rangeByScore(properties.getOutboxKey(),0,System.currentTimeMillis(),0,properties.getDispatchBatchSize());
         return ids==null?Collections.emptySet():ids;
     }
     public String state(Long id){

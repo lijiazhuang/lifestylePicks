@@ -13,6 +13,7 @@ public class TradeProperties implements InitializingBean {
     private String outboxKey="seckill:outbox";
     private Duration sendTimeout=Duration.ofSeconds(3);
     private Duration dispatchRetryDelay=Duration.ofSeconds(5);
+    private int dispatchBatchSize=400;
     private String zone="Asia/Shanghai";
     public String getOrderTopic(){
         return orderTopic;}
@@ -23,6 +24,8 @@ public class TradeProperties implements InitializingBean {
     public void setSendTimeout(Duration value){sendTimeout=value;}
     public Duration getDispatchRetryDelay(){return dispatchRetryDelay;}
     public void setDispatchRetryDelay(Duration value){dispatchRetryDelay=value;}
+    public int getDispatchBatchSize(){return dispatchBatchSize;}
+    public void setDispatchBatchSize(int value){dispatchBatchSize=value;}
     public String getZone(){return zone;}
     public void setZone(String value){zone=value;}
     @Override
@@ -30,5 +33,6 @@ public class TradeProperties implements InitializingBean {
         Assert.hasText(orderTopic,"RocketMQ Topic 不能为空"); Assert.hasText(outboxKey,"待投递 key 不能为空");
         Assert.isTrue(sendTimeout!=null && sendTimeout.toMillis()>0,"发送超时必须大于零");
         Assert.isTrue(dispatchRetryDelay!=null && dispatchRetryDelay.toMillis()>0,"重试间隔必须大于零"); ZoneId.of(zone);
+        Assert.isTrue(dispatchBatchSize>0,"投递批量大小必须大于零");
     }
 }

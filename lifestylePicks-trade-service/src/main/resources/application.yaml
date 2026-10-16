@@ -25,7 +25,8 @@ lifestylepicks:
     outbox-key: seckill:outbox
     send-timeout: 3s
     dispatch-retry-delay: 5s
-    dispatch-interval: 1000
+    dispatch-interval: 500
+    dispatch-batch-size: ${SECKILL_DISPATCH_BATCH_SIZE:300}
     zone: Asia/Shanghai
     mq-enabled: ${TRADE_MQ_ENABLED:true}
 

@@ -41,7 +41,8 @@ public class OrderService {
                         "seckill:meta:"+vid,"seckill:status:"+id
                 ),
                 uid.toString(),
-                vid,Long.toString(id),
+                vid,
+                Long.toString(id),
                 Long.toString(now.toEpochMilli())
         );
         if(Long.valueOf(0).equals(code)){
