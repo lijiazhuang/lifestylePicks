@@ -49,7 +49,29 @@ Redis 保留库存、买家集合、时间元数据和状态。Lua 原子写入�
 
 当前 YAML 配置为每轮执行结束后等待 500ms，每批最多 300 条。间隔使用 `lifestylepicks.trade.dispatch-interval`（毫秒），数量使用 `lifestylepicks.trade.dispatch-batch-size`，也可通过环境变量 `SECKILL_DISPATCH_BATCH_SIZE` 配置；数量必须大于零。发送仍为逐条同步发送，因此实际周期还包含整批发送和 Redis 操作耗时，不能用批量大小除以等待间隔当作投递吞吐。
 
-发送超时 3 秒，未确认后 5 秒再试。只有 SEND_OK 才移除待投递记录。发送超时可能已经送达 Broker，因此不盲目退库存，而是补发同一订单，消费者幂等处理。[发送重试说明](https://rocketmq.apache.org/docs/featureBehavior/05sendretrypolicy/)
+发送超时 3 秒。未确认后按每条订单独立的指数退避补发，只有 SEND_OK 才移除待投递记录。发送超时可能已经送达 Broker，因此不盲目退库存，而是补发同一订单，消费者幂等处理。[发送重试说明](https://rocketmq.apache.org/docs/featureBehavior/05sendretrypolicy/)
+
+### 发送端指数退避与全局告警
+
+以下配置均位于 `lifestylepicks.trade`：
+
+| 配置 | 默认值 | 含义 |
+|---|---|---|
+| dispatch-retry-delay | 5s | 首次投递失败后的基础等待时间 |
+| dispatch-retry-max-delay | 5m | 基础等待时间翻倍的上限，不能小于首次等待时间 |
+| publish-retry-alert-window | 5m | 所有订单补发失败的滑动统计窗口 |
+| publish-retry-alert-threshold | 100 | 窗口内补发失败次数的告警阈值 |
+| publish-retry-alert-cooldown | 5m | 同一个 outbox 的全局 ERROR 告警冷却时间 |
+
+订单 Hash `seckill:status:{orderId}` 的 `publishFailCount` 记录完整应用层投递失败次数，包含首次失败，兼容旧 PENDING 记录缺少该字段的情况。每次基础延时按 `5s → 10s → 20s → 40s → 80s → 160s → 300s → 300s…` 增长，再随机取其 80%–100%；例如首次实际等待约 4–5 秒，达到上限后实际等待约 4–5 分钟。下一次投递时间保存在 ZSET score 中，不使用线程休眠，不改变普通投递器扫描间隔。
+
+首次投递失败仍只记 WARN；同一订单从第二次投递失败起才写入全局窗口。每次应用层 `syncSend` 内部可能还有 SDK 重试，这些网络尝试不单独计数。告警使用 `SECKILL_ORDER_PUBLISH_RETRY_ALERT` 标记，包含 Topic、outbox、窗口、失败次数、阈值、待投递数量、当前订单 ID、当前订单失败次数和下次重试时间。它是本地 ERROR 日志，需人工查看或由日志平台采集。
+
+窗口 ZSET 为 `{outbox-key}:publish-retry-failures`，每次失败事件使用独立 ID，移除窗口外数据，并设置与窗口相同的过期时间。冷却标记为 `{outbox-key}:publish-retry-alert`。计数、调度、窗口更新和告警冷却领取在同一段 Lua 中完成，同一业务的多个实例共享统计和冷却；独立 outbox 则相互隔离。冷却标记先在 Redis 中领取，再记录日志，因此采用“每个冷却期最多一次”的告警方式，不是持久化告警投递服务。
+
+达到阈值后仍保留原预留、原订单 ID 和 outbox 记录，继续退避补发，不自动关闭订单或回退库存。SUCCESS/FAILED 不再增加次数或重新调度；缺失状态、错误 key 类型等异常不删除待投递记录。Redis 无法登记重试时输出 `SECKILL_ORDER_PUBLISH_DEFER_FAILED`，保留数据供恢复后检查。MQ 已确认成功、仅 Redis 清理失败时使用独立的 `SECKILL_ORDER_PUBLISH_CLEANUP_FAILED` 日志，不误计为 MQ 补发失败。
+
+退避降低重试压力，不能阻止 MQ 故障期间不断受理新订单造成的积压；本次没有引入入口熔断、自动补偿或单订单次数耗尽后停止重试。
 
 消费采用集群模式，异常抛出交给 RocketMQ 重试，最多 16 次后进入 %DLQ%seckill_order_consumer_group。新组从已有消息开始读取，已有组按 Broker 进度继续。[消费重试说明](https://rocketmq.apache.org/docs/4.x/consumer/02push/)
 
@@ -90,6 +112,10 @@ docker exec rmqbroker sh /home/rocketmq/rocketmq-5.2.0/bin/mqadmin updateTopic \
 其余变量保持原样：TRADE_PORT、TRADE_DB_URL/USERNAME/PASSWORD、REDIS_HOST/PORT/DATABASE/PASSWORD。TRADE_MQ_ENABLED 默认 true，可关闭消息组件，但关闭后不会异步落库。无 Broker 的测试还显式排除 RocketMQAutoConfiguration；仅关闭监听器不能代替关闭客户端自动配置。
 
 ## 验证
+
+发送端退避与告警可在父工程目录运行 `scripts/verify_publish_retry.py`，使用 `--java`、`--redis-server`、`--maven` 提供本机可执行文件路径。脚本只启动临时独立端口的 Redis，关闭持久化，并运行离线 Maven/JUnit；退出时停止自己创建的 Redis，不连接现有 Redis、MySQL 或 RocketMQ，不执行 FLUSHDB。日志保存在交易服务 `target/publish-retry-verify-*`。
+
+本次该脚本构建成功、25 项测试通过：真实独立 Redis 集成测试 8 项、消息逻辑测试 13 项、死信日志测试 2 项、配置校验测试 2 项。覆盖退避范围与封顶、旧状态兼容、首次失败排除、跨订单窗口、并发计数和冷却去重、窗口过期、终态不重排、错误元数据保留、独立 outbox 隔离，以及发送确认后清理失败不误计数。没有向正式 Topic 注入失败消息。
 
 父工程 mvn install 执行模拟 MQ 的单元测试，不连接 Broker。
 

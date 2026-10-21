@@ -25,6 +25,10 @@ lifestylepicks:
     outbox-key: seckill:outbox
     send-timeout: 3s
     dispatch-retry-delay: 5s
+    dispatch-retry-max-delay: 5m
+    publish-retry-alert-window: 5m
+    publish-retry-alert-threshold: 100
+    publish-retry-alert-cooldown: 5m
     dispatch-interval: 500
     dispatch-batch-size: ${SECKILL_DISPATCH_BATCH_SIZE:300}
     zone: Asia/Shanghai

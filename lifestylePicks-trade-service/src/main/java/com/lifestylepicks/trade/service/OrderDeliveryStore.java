@@ -7,18 +7,19 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 
 /** Redis 保存预留状态及 MQ 补发记录，订单落库只在 MQ 消费者中执行。 */
 @Service
 public class OrderDeliveryStore {
     private final StringRedisTemplate redis;
     private final TradeProperties properties;
-    private final DefaultRedisScript<Long> settle=script("settle-order.lua");
-    private final DefaultRedisScript<Long> fail=script("fail-order.lua");
-    private final DefaultRedisScript<Long> defer=script("defer-publish.lua");
+    private final DefaultRedisScript<Long> settle=script("settle-order.lua",Long.class);
+    private final DefaultRedisScript<Long> fail=script("fail-order.lua",Long.class);
+    private final DefaultRedisScript<List> defer=script("defer-publish.lua",List.class);
     public OrderDeliveryStore(StringRedisTemplate redis,TradeProperties properties){this.redis=redis;this.properties=properties;}
-    private static DefaultRedisScript<Long> script(String file){
-        DefaultRedisScript<Long> value=new DefaultRedisScript<>();value.setLocation(new ClassPathResource("lua/"+file));value.setResultType(Long.class);return value;
+    private static <T> DefaultRedisScript<T> script(String file,Class<T> resultType){
+        DefaultRedisScript<T> value=new DefaultRedisScript<>();value.setLocation(new ClassPathResource("lua/"+file));value.setResultType(resultType);return value;
     }
     public Set<String> due(){
         Set<String> ids=redis.opsForZSet().rangeByScore(properties.getOutboxKey(),0,System.currentTimeMillis(),0,properties.getDispatchBatchSize());
@@ -39,11 +40,28 @@ public class OrderDeliveryStore {
     public void sent(Long id){
         redis.opsForZSet().remove(properties.getOutboxKey(),id.toString());
     }
-    public void defer(Long id){
-        redis.execute(defer,
-                Arrays.asList("seckill:status:"+id, properties.getOutboxKey()),
+    public PublishRetryResult defer(Long id){
+        String outbox=properties.getOutboxKey();
+        List<?> result=redis.execute(
+                defer,
+                Arrays.asList("seckill:status:"+id, outbox,
+                        outbox+":publish-retry-failures",outbox+":publish-retry-alert"),
                 id.toString(),
-                Long.toString(System.currentTimeMillis()+properties.getDispatchRetryDelay().toMillis()));
+                Long.toString(System.currentTimeMillis()),
+                Long.toString(properties.getDispatchRetryDelay().toMillis()),
+                Long.toString(properties.getDispatchRetryMaxDelay().toMillis()),
+                Double.toString(ThreadLocalRandom.current().nextDouble(0.8,1.0)),
+                Long.toString(properties.getPublishRetryAlertWindow().toMillis()),
+                Integer.toString(properties.getPublishRetryAlertThreshold()),
+                Long.toString(properties.getPublishRetryAlertCooldown().toMillis()),
+                id+":"+UUID.randomUUID().toString()
+        );
+        if(result==null || result.size()!=5 || result.stream().anyMatch(value -> !(value instanceof Number))){
+            throw new IllegalStateException("Redis 未返回有效的订单重试调度结果");
+        }
+        return new PublishRetryResult(((Number)result.get(0)).longValue(),((Number)result.get(1)).longValue(),
+                ((Number)result.get(2)).longValue(),((Number)result.get(3)).longValue()==1,
+                ((Number)result.get(4)).longValue());
     }
     public void success(SeckillOrderMessage message,long canonicalId){
         redis.execute(settle,
