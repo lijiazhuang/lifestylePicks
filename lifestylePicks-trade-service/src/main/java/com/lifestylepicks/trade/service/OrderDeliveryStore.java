@@ -11,6 +11,8 @@ import java.util.concurrent.ThreadLocalRandom;
 
 /** Redis 保存预留状态及 MQ 补发记录，订单落库只在 MQ 消费者中执行。 */
 //git命令使用
+    //分支测试
+    //分支测试2
 @Service
 public class OrderDeliveryStore {
     private final StringRedisTemplate redis;
